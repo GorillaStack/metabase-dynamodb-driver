@@ -2,12 +2,10 @@
   (:refer-clojure :exclude [second])
   (:require [metabase.driver :as driver]
             [metabase.driver.common :as driver.common]
-            [metabase.util
-             [date :as du]]
+            [metabase.util.date :as du]
             [metabase.query-processor.store :as qp.store]
-            [metabase.driver.dynamodb
-             [query-processor :as qp]
-             [util :refer [with-dynamodb-client]]]))
+            [metabase.driver.dynamodb.query-processor :as qp]
+            [metabase.driver.dynamodb.util :refer [with-dynamodb-client]]))
 
 (driver/register! :dynamodb)
 

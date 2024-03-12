@@ -1,12 +1,10 @@
 (ns metabase.driver.dynamodb.query-processor
   (:require [clojure.string :as str]
-            [metabase.mbql
-             [schema :as mbql.s]
-             [util :as mbql.u]]
+            [metabase.mbql.schema :as mbql.s]
+            [metabase.mbql.util :as mbql.u]
             [metabase.models.field :refer [Field]]
-            [metabase.query-processor
-             [interface :as i]
-             [store :as qp.store]]
+            [metabase.query-processor.interface :as i]
+            [metabase.query-processor.store :as qp.store]
             [metabase.driver.dynamodb.util :refer [*dynamodb-client*]])
   (:import metabase.models.field.FieldInstance))
 
