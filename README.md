@@ -23,7 +23,7 @@ clojure \
   -Sdeps "{:aliases {:dynamodb {:extra-deps {com.metabase/dynamodb-driver {:local/root \"$DRIVER_PATH\"}}}}}"  \
   -X:build:dynamodb \
   build-drivers.build-driver/build-driver! \
-  "{:driver :metabase.driver.dynamodb, :project-dir \"$DRIVER_PATH\", :target-dir \"$DRIVER_PATH/target\"}"
+  "{:driver :dynamodb, :project-dir \"$DRIVER_PATH\", :target-dir \"$DRIVER_PATH/target\"}"
 ```
 
 These build steps have been copied from the [Sample Metabase Driver: Sudoku](https://github.com/metabase/sudoku-driver). Check the [build section](https://github.com/metabase/sudoku-driver?tab=readme-ov-file#building-the-driver) of the REAMDE for more details.
