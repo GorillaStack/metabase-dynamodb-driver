@@ -23,10 +23,11 @@
   (let [table-desc (-> (.describeTable *dynamodb-client* table)
                        (.getTable))]
     (println "describe-table" table-desc)
-    (for [attribute-def (.getAttributeDefinitions table-desc)]
+    (for [attribute-def (.getAttributeDefinitions table-desc) idx]
       {:name      (.getAttributeName attribute-def)
        :database-type (.getAttributeType attribute-def)
-       :base-type (dynamodb-type->base-type (.getAttributeType attribute-def))})) )
+       :base-type (dynamodb-type->base-type (.getAttributeType attribute-def))
+       :database-position idx})) )
 
 (defmulti ^:private ->rvalue
   "Format this `Field` or value for use as the right hand value of an expression, e.g. by adding `$` to a `Field`'s
