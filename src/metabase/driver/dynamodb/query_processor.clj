@@ -27,7 +27,7 @@
       {:name      (.getAttributeName attribute-def)
        :database-type (.getAttributeType attribute-def)
        :base-type (dynamodb-type->base-type (.getAttributeType attribute-def))
-       :database-position (rand-int 30)})) )
+       :database-position (.getId attribute-def)})) )
 
 (defmulti ^:private ->rvalue
   "Format this `Field` or value for use as the right hand value of an expression, e.g. by adding `$` to a `Field`'s
