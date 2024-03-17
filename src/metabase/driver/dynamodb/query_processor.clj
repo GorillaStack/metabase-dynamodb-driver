@@ -1,10 +1,14 @@
 (ns metabase.driver.dynamodb.query-processor
   (:require [clojure.string :as str]
+            [medley.core :as m]
+            [metabase.lib.metadata :as lib.metadata]
             [metabase.mbql.schema :as mbql.s]
             [metabase.mbql.util :as mbql.u]
             [metabase.models.field :refer [Field]]
             [metabase.query-processor.store :as qp.store]
-            [metabase.driver.dynamodb.util :refer [*dynamodb-client*]]))
+            [metabase.query-processor.reducible :as qp.reducible]
+            [metabase.driver.dynamodb.util :refer [*dynamodb-client*]]
+            [metabase.util.malli :as mu]))
 
 (def ^:dynamic ^:private *query* nil)
 
@@ -23,11 +27,11 @@
   (let [table-desc (-> (.describeTable *dynamodb-client* table)
                        (.getTable))]
     (println "describe-table" table-desc)
-    (for [attribute-def (.getAttributeDefinitions table-desc)]
+    (for [[idx attribute-def] (m/indexed (.getAttributeDefinitions table-desc))]
       {:name      (.getAttributeName attribute-def)
        :database-type (.getAttributeType attribute-def)
        :base-type (dynamodb-type->base-type (.getAttributeType attribute-def))
-       :database-position (.getId attribute-def)})) )
+       :database-position idx})) )
 
 (defmulti ^:private ->rvalue
   "Format this `Field` or value for use as the right hand value of an expression, e.g. by adding `$` to a `Field`'s
@@ -45,9 +49,28 @@
   {:arglists '([field])}
   mbql.u/dispatch-by-clause-name-or-class)
 
+(defn- field-name-components [{:keys [parent-id], field-name :name, :as _field}]
+  (concat
+   (when parent-id
+     (field-name-components (lib.metadata/field (qp.store/metadata-provider) parent-id)))
+   [field-name]))
+
+(mu/defn field->name
+  "Return a single string name for `field`. For nested fields, this creates a combined qualified name."
+  ([field]
+   (field->name field \.))
+
+  ([field     :- lib.metadata/ColumnMetadata
+    separator :- [:or :string char?]]
+   (str/join separator (field-name-components field))))
+
 (defmethod ->rvalue :default
   [x]
   x)
+
+(defmethod ->lvalue :model/Field
+  [field]
+  (field->name field))
 
 (defmethod ->lvalue :field
   [[_ id-or-name]]
@@ -56,25 +79,6 @@
 (defmethod ->rvalue :field
   [[_ id-or-name]]
   (->rvalue (qp.store/field id-or-name)))
-
-;; (defn- with-lvalue-temporal-bucketing [field unit]
-;;   (if (= unit :default)
-;;     field
-;;     (str field "___" (name unit))))
-
-;; (defmethod ->lvalue :field
-;;   [[_ id-or-name {:keys [temporal-unit]}]]
-;;   (cond-> (if (integer? id-or-name)
-;;             (->lvalue (qp.store/field id-or-name))
-;;             (name id-or-name))
-;;     temporal-unit (with-lvalue-temporal-bucketing temporal-unit)))
-
-;; (defmethod ->rvalue :field
-;;   [[_ id-or-name {:keys [temporal-unit]}]]
-;;   (cond-> (if (integer? id-or-name)
-;;             (->rvalue (qp.store/field id-or-name))
-;;             (str \$ (name id-or-name)))
-;;     temporal-unit (with-lvalue-temporal-bucketing temporal-unit)))
 
 (defn- handle-fields [{:keys [fields]} pipeline-ctx]
   (println "handle-fields" fields)
@@ -99,6 +103,9 @@
        :mbql?       true})))
 
 (defn execute-reducible-query
-  [{{:keys [collection query mbql? projections]} :native}]
+  [{{:keys [collection query mbql? projections]} :native} context respond]
   (println "execute-reducible-query:"  query)
-  {:rows []})
+  ;; implement query execution logic here and pass the result to `respond` in the expected format
+  (respond
+    {:cols [{:name "my_col"}]}
+    {:rows []}))
