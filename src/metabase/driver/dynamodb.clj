@@ -2,6 +2,11 @@
   (:refer-clojure :exclude [second])
   (:require [metabase.driver :as driver]
             [metabase.driver.dynamodb.query-processor :as dynamodb.qp]
+            [metabase.driver.sql.util.unprepare :as unprepare]
+            [metabase.driver.sql-jdbc.common :as sql-jdbc.common]
+            [metabase.driver.sql-jdbc.connection :as sql-jdbc.conn]
+            [metabase.driver.sql-jdbc.execute :as sql-jdbc.execute]
+            [metabase.driver.sql-jdbc.sync :as sql-jdbc.sync]
             [metabase.driver.dynamodb.util :refer [with-dynamodb-client]]))
 
 (driver/register! :dynamodb)
@@ -26,6 +31,12 @@
 (defmethod driver/mbql->native :dynamodb [_ query]
   (dynamodb.qp/mbql->native query))
 
+(defn- prepare-query [driver {query :native, :as outer-query}]
+  (cond-> outer-query
+    (seq (:params query))
+    (merge {:native {:params nil
+                     :query (unprepare/unprepare driver (cons (:query query) (:params query)))}})))
+
 (defmethod driver/execute-reducible-query :dynamodb
-  [_ query context respond]
-  (dynamodb.qp/execute-reducible-query query context respond))
+  [driver query context respond]
+  ((get-method driver/execute-reducible-query :sql-jdbc) driver (prepare-query driver query) context respond))
