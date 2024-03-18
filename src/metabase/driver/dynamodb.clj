@@ -26,6 +26,12 @@
 (defmethod driver/mbql->native :dynamodb [_ query]
   (dynamodb.qp/mbql->native query))
 
+(defn- prepare-query [driver {query :native, :as outer-query}]
+  (cond-> outer-query
+    (seq (:params query))
+    (merge {:native {:params nil
+                     :query (unprepare/unprepare driver (cons (:query query) (:params query)))}})))
+
 (defmethod driver/execute-reducible-query :dynamodb
   [_ query context respond]
-  (dynamodb.qp/execute-reducible-query query context respond))
+  ((get-method driver/execute-reducible-query :sql-jdbc) driver (prepare-query driver query) context respond))
