@@ -1,10 +1,13 @@
 (ns metabase.driver.dynamodb.query-processor
+  (:import [com.amazonaws.services.dynamodbv2.model QueryRequest])
   (:require [clojure.string :as str]
+            [cheshire.core :as json]
             [medley.core :as m]
             [metabase.lib.metadata :as lib.metadata]
             [metabase.mbql.schema :as mbql.s]
             [metabase.mbql.util :as mbql.u]
             [metabase.models.field :refer [Field]]
+            [metabase.query-processor.context :as qp.context]
             [metabase.query-processor.store :as qp.store]
             [metabase.query-processor.reducible :as qp.reducible]
             [metabase.driver.dynamodb.util :refer [*dynamodb-client*]]
@@ -105,7 +108,23 @@
 (defn execute-reducible-query
   [{{:keys [collection query mbql? projections]} :native} context respond]
   (println "execute-reducible-query:"  query)
-  ;; implement query execution logic here and pass the result to `respond` in the expected format
-  (respond
-    {:cols [{:name "my_col"}]}
-    {:rows []}))
+  (println "collection:" collection)
+  (let [parsed-query (json/parse-string query)
+    table-name (get parsed-query "TableName")
+    index (get parsed-query "Index")
+    key-condition-expression (get parsed-query "KeyConditionExpression")
+    query-req (QueryRequest.)]
+    (doto query-req
+      (.setTableName table-name)
+      (.setIndexName index)
+      (.setKeyConditionExpression key-condition-expression)
+      (.setExpressionAttributeValues (get parsed-query "ExpressionAttributeValues"))
+      (.setExpressionAttributeNames (get parsed-query "ExpressionAttributeNames")))
+    (println "query-req:" query-req)
+    (let [items (-> (.query *dynamodb-client* query-req) (.getItems))
+          first-item (first items)]
+      (println "items:" (json/generate-string items {:pretty true}))
+      (println "first-item.data:" (json/generate-string (get first-item "data") {:pretty true}))
+      (respond
+        {:cols (map (fn [key] {:name (str key)}) (keys (.getM (get first-item "data"))))}
+        (map (fn [item] (.getM (get item "data"))) items)))))
