@@ -28,6 +28,10 @@
           (f *dynamodb-client*))
         (finally (.shutdown client))))))
 
+(defn log
+  [& args]
+  (apply println "[dynamodb-driver]" args))
+
 (defmacro with-dynamodb-client
   "Open a new DynamoDB client"
   [[binding database] & body]

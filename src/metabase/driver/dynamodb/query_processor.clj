@@ -1,14 +1,19 @@
 (ns metabase.driver.dynamodb.query-processor
+  (:import [com.amazonaws.services.dynamodbv2.model QueryRequest])
   (:require [clojure.string :as str]
+            [cheshire.core :as json]
             [medley.core :as m]
             [metabase.lib.metadata :as lib.metadata]
             [metabase.mbql.schema :as mbql.s]
             [metabase.mbql.util :as mbql.u]
             [metabase.models.field :refer [Field]]
+            [metabase.query-processor.context :as qp.context]
             [metabase.query-processor.store :as qp.store]
             [metabase.query-processor.reducible :as qp.reducible]
+            [metabase.driver.dynamodb.util :as dynamodb.util]
             [metabase.driver.dynamodb.util :refer [*dynamodb-client*]]
-            [metabase.util.malli :as mu]))
+            [metabase.util.malli :as mu]
+            [taoensso.faraday :as far]))
 
 (def ^:dynamic ^:private *query* nil)
 
@@ -18,15 +23,20 @@
 
 (defn- dynamodb-type->base-type [attr-type]
   (case attr-type
+    "M"      :type/*
+    "L"      :type/Array
     "N"      :type/Decimal
+    "NS"     :type/Array
     "S"      :type/Text
+    "SS"     :type/Array
     "BOOL"   :type/Boolean
+    "NULL"   :type/Nil
     :type/*))
 
 (defn describe-table [table]
   (let [table-desc (-> (.describeTable *dynamodb-client* table)
                        (.getTable))]
-    (println "describe-table" table-desc)
+    (dynamodb.util/log "describe-table" table-desc)
     (for [[idx attribute-def] (m/indexed (.getAttributeDefinitions table-desc))]
       {:name      (.getAttributeName attribute-def)
        :database-type (.getAttributeType attribute-def)
@@ -81,7 +91,7 @@
   (->rvalue (qp.store/field id-or-name)))
 
 (defn- handle-fields [{:keys [fields]} pipeline-ctx]
-  (println "handle-fields" fields)
+  (dynamodb.util/log "handle-fields" fields)
   (if-not (seq fields)
     pipeline-ctx
     (let [new-projections (for [field fields]
@@ -93,7 +103,7 @@
 (defn mbql->native [{{source-table-id :source-table} :query, :as query}]
   (let [{source-table-name :name} (qp.store/table source-table-id)]
     (binding [*query* query]
-      (println "mbql->native:" query)
+      (dynamodb.util/log "mbql->native:" query)
       {:projections nil
        :query       (reduce (fn [pipeline-ctx f]
                               (f (:query query) pipeline-ctx))
@@ -104,8 +114,23 @@
 
 (defn execute-reducible-query
   [{{:keys [collection query mbql? projections]} :native} context respond]
-  (println "execute-reducible-query:"  query)
-  ;; implement query execution logic here and pass the result to `respond` in the expected format
-  (respond
-    {:cols [{:name "my_col"}]}
-    {:rows []}))
+  (dynamodb.util/log "execute-reducible-query:"  query)
+  (dynamodb.util/log "collection:" collection)
+  (let [parsed-query (json/parse-string query)
+    table-name (get parsed-query "TableName")
+    index (get parsed-query "Index")
+    key-condition-expression (get parsed-query "KeyConditionExpression")
+    query-req (QueryRequest.)]
+    (doto query-req
+      (.setTableName table-name)
+      (.setIndexName index)
+      (.setKeyConditionExpression key-condition-expression)
+      (.setExpressionAttributeValues (get parsed-query "ExpressionAttributeValues"))
+      (.setExpressionAttributeNames (get parsed-query "ExpressionAttributeNames")))
+    (dynamodb.util/log "query-req:" query-req)
+    (let [items (-> (.query *dynamodb-client* query-req) (.getItems))
+          parsed-items (mapv far/db-item->clj-item items)
+          first-item (first parsed-items)]
+      (respond
+        {:cols (map (fn [key] {:name (name key)}) (keys (get first-item :data)))}
+        (map (fn [item] (vals (get item :data))) parsed-items)))))
