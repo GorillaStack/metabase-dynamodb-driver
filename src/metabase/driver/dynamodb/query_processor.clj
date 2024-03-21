@@ -112,25 +112,62 @@
        :collection  nil
        :mbql?       true})))
 
-(defn execute-reducible-query
-  [{{:keys [collection query mbql? projections]} :native} context respond]
-  (dynamodb.util/log "execute-reducible-query:"  query)
-  (dynamodb.util/log "collection:" collection)
-  (let [parsed-query (json/parse-string query)
-    table-name (get parsed-query "TableName")
-    index (get parsed-query "Index")
-    key-condition-expression (get parsed-query "KeyConditionExpression")
-    query-req (QueryRequest.)]
+(defn execute-query [parsed-query dynamodb-client]
+  (let [table-name (get parsed-query "TableName")
+        index (get parsed-query "Index")
+        key-condition-expression (get parsed-query "KeyConditionExpression")
+        query-req (QueryRequest.)]
     (doto query-req
       (.setTableName table-name)
       (.setIndexName index)
       (.setKeyConditionExpression key-condition-expression)
       (.setExpressionAttributeValues (get parsed-query "ExpressionAttributeValues"))
       (.setExpressionAttributeNames (get parsed-query "ExpressionAttributeNames")))
-    (dynamodb.util/log "query-req:" query-req)
-    (let [items (-> (.query *dynamodb-client* query-req) (.getItems))
-          parsed-items (mapv far/db-item->clj-item items)
-          first-item (first parsed-items)]
-      (respond
-        {:cols (map (fn [key] {:name (name key)}) (keys (get first-item :data)))}
-        (map (fn [item] (vals (get item :data))) parsed-items)))))
+    (loop [results [] last-key nil]
+      (let [response (.query dynamodb-client (if last-key
+                                               (.withExclusiveStartKey query-req last-key)
+                                               query-req))]
+        (let [items (-> response .getItems)
+              parsed-items (mapv far/db-item->clj-item items)
+              new-results (concat results parsed-items)
+              next-key (.getLastEvaluatedKey response)]
+          (if next-key
+            (recur new-results next-key)
+            new-results))))))
+
+(defn execute-reducible-query
+  [{{:keys [collection query mbql? projections]} :native} context respond]
+  (dynamodb.util/log "execute-reducible-query:"  query)
+  (dynamodb.util/log "collection:" collection)
+  (let [parsed-query (json/parse-string query)
+        parsed-items (execute-query parsed-query *dynamodb-client*)
+        first-item (first parsed-items)
+        first-item-keys (keys (get first-item :data))]
+    (dynamodb.util/log "first-item:" first-item)
+    (respond
+      {:cols (map (fn [key] {:name (name key)}) first-item-keys)}
+      (map (fn [item] (map (fn [k] (get (get item :data) k)) first-item-keys)) parsed-items))))
+
+;; (defn execute-reducible-query
+;;   [{{:keys [collection query mbql? projections]} :native} context respond]
+;;   (dynamodb.util/log "execute-reducible-query:"  query)
+;;   (dynamodb.util/log "collection:" collection)
+;;   (let [parsed-query (json/parse-string query)
+;;     table-name (get parsed-query "TableName")
+;;     index (get parsed-query "Index")
+;;     key-condition-expression (get parsed-query "KeyConditionExpression")
+;;     query-req (QueryRequest.)]
+;;     (doto query-req
+;;       (.setTableName table-name)
+;;       (.setIndexName index)
+;;       (.setKeyConditionExpression key-condition-expression)
+;;       (.setExpressionAttributeValues (get parsed-query "ExpressionAttributeValues"))
+;;       (.setExpressionAttributeNames (get parsed-query "ExpressionAttributeNames")))
+;;     (dynamodb.util/log "query-req:" query-req)
+;;     (let [items (-> (.query *dynamodb-client* query-req) (.getItems))
+;;           parsed-items (mapv far/db-item->clj-item items)
+;;           first-item (first parsed-items)
+;;           first-item-keys (keys (get first-item :data))]
+;;       (respond
+;;         {:cols (map (fn [key] {:name (name key)}) first-item-keys)}
+;;         (map (fn [item] (map (fn [k] (get (get item :data) k)) first-item-keys)) parsed-items)))))
