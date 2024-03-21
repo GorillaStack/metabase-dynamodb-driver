@@ -147,27 +147,3 @@
     (respond
       {:cols (map (fn [key] {:name (name key)}) first-item-keys)}
       (map (fn [item] (map (fn [k] (get (get item :data) k)) first-item-keys)) parsed-items))))
-
-;; (defn execute-reducible-query
-;;   [{{:keys [collection query mbql? projections]} :native} context respond]
-;;   (dynamodb.util/log "execute-reducible-query:"  query)
-;;   (dynamodb.util/log "collection:" collection)
-;;   (let [parsed-query (json/parse-string query)
-;;     table-name (get parsed-query "TableName")
-;;     index (get parsed-query "Index")
-;;     key-condition-expression (get parsed-query "KeyConditionExpression")
-;;     query-req (QueryRequest.)]
-;;     (doto query-req
-;;       (.setTableName table-name)
-;;       (.setIndexName index)
-;;       (.setKeyConditionExpression key-condition-expression)
-;;       (.setExpressionAttributeValues (get parsed-query "ExpressionAttributeValues"))
-;;       (.setExpressionAttributeNames (get parsed-query "ExpressionAttributeNames")))
-;;     (dynamodb.util/log "query-req:" query-req)
-;;     (let [items (-> (.query *dynamodb-client* query-req) (.getItems))
-;;           parsed-items (mapv far/db-item->clj-item items)
-;;           first-item (first parsed-items)
-;;           first-item-keys (keys (get first-item :data))]
-;;       (respond
-;;         {:cols (map (fn [key] {:name (name key)}) first-item-keys)}
-;;         (map (fn [item] (map (fn [k] (get (get item :data) k)) first-item-keys)) parsed-items)))))
