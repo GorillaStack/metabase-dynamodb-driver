@@ -113,14 +113,11 @@
        :mbql?       true})))
 
 (defn execute-query [parsed-query dynamodb-client]
-  (let [table-name (get parsed-query "TableName")
-        index (get parsed-query "Index")
-        key-condition-expression (get parsed-query "KeyConditionExpression")
-        query-req (QueryRequest.)]
+  (let [query-req (QueryRequest.)]
     (doto query-req
-      (.setTableName table-name)
-      (.setIndexName index)
-      (.setKeyConditionExpression key-condition-expression)
+      (.setTableName (get parsed-query "TableName"))
+      (.setIndexName (get parsed-query "Index"))
+      (.setKeyConditionExpression (get parsed-query "KeyConditionExpression"))
       (.setExpressionAttributeValues (get parsed-query "ExpressionAttributeValues"))
       (.setExpressionAttributeNames (get parsed-query "ExpressionAttributeNames")))
     (loop [results [] last-key nil]
